@@ -11,7 +11,6 @@ const fs = require('fs');
 const os = require('os');
 
 const ROOT = path.resolve(__dirname);
-const npm = /^win/.test(process.platform) ? 'npm.cmd' : 'npm';
 
 const c = {
   reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
@@ -176,8 +175,7 @@ function launchWithBanner(message, script) {
   const envPath = path.join(ROOT, '.env.local');
   if (!fs.existsSync(envPath)) {
     console.log(`  ${c.brightYellow}${i.warn}${c.reset} No configuration found. Running setup first...\n`);
-    const proc = spawn('node', ['setup.js'], { cwd: ROOT, stdio: 'inherit' });
-    proc.on('close', () => {});
+    spawn('node', ['setup.js'], { cwd: ROOT, stdio: 'inherit', shell: true });
     return;
   }
 
@@ -185,7 +183,7 @@ function launchWithBanner(message, script) {
   const nmPath = path.join(ROOT, 'node_modules');
   if (!fs.existsSync(nmPath)) {
     console.log(`  ${c.brightYellow}${i.warn}${c.reset} ${i.package} Dependencies missing. Installing...\n`);
-    const proc = spawn(npm, ['install'], { cwd: ROOT, stdio: 'inherit' });
+    const proc = spawn('npm', ['install'], { cwd: ROOT, stdio: 'inherit', shell: true });
     proc.on('close', (code) => {
       if (code === 0) {
         console.log(`\n  ${c.brightGreen}${i.check}${c.reset} Dependencies ready. Launching...\n`);
@@ -201,7 +199,7 @@ function launchWithBanner(message, script) {
 function doLaunch(script) {
   console.log(`  ${c.dim}${i.gear} Starting services...${c.reset}\n`);
 
-  const proc = spawn(npm, ['run', script], { cwd: ROOT, stdio: 'inherit' });
+  const proc = spawn('npm', ['run', script], { cwd: ROOT, stdio: 'inherit', shell: true });
 
   proc.on('close', (code) => {
     if (code !== 0 && code !== null) {

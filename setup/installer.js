@@ -12,33 +12,50 @@ const { getProjectRoot } = require('./detect');
  */
 async function installDependencies(projectRoot) {
   const s = spinner('Installing dependencies...');
-  return new Promise((resolve) => {
-    const proc = spawn(/^win/.test(process.platform) ? 'npm.cmd' : 'npm', ['install'], {
-      cwd: projectRoot,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, NODE_ENV: 'development' },
-    });
 
-    let output = '';
-    proc.stdout.on('data', (d) => { output += d.toString(); });
-    proc.stderr.on('data', (d) => { output += d.toString(); });
+  // Try spawn first, fallback to execSync if EINVAL
+  try {
+    return await new Promise((resolve) => {
+      const proc = spawn('npm', ['install'], {
+        cwd: projectRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: true,
+        env: { ...process.env, NODE_ENV: 'development' },
+      });
 
-    proc.on('close', (code) => {
-      if (code === 0) {
-        s.stop('Dependencies installed');
-        resolve(true);
-      } else {
-        s.fail('Dependency install failed');
-        console.log(output.slice(-500));
-        resolve(false);
-      }
-    });
+      let output = '';
+      proc.stdout.on('data', (d) => { output += d.toString(); });
+      proc.stderr.on('data', (d) => { output += d.toString(); });
 
-    proc.on('error', () => {
-      s.fail('npm not found');
-      resolve(false);
+      proc.on('close', (code) => {
+        if (code === 0) { s.stop('Dependencies installed'); resolve(true); }
+        else { s.fail('Dependency install failed'); console.log(output.slice(-500)); resolve(false); }
+      });
+
+      proc.on('error', (err) => {
+        // EINVAL fallback: use execSync
+        s.update('Retrying with fallback...');
+        try {
+          execSync('npm install', { cwd: projectRoot, stdio: 'inherit', timeout: 300000 });
+          s.stop('Dependencies installed (fallback)');
+          resolve(true);
+        } catch {
+          s.fail('npm install failed');
+          resolve(false);
+        }
+      });
     });
-  });
+  } catch {
+    // Ultimate fallback
+    try {
+      execSync('npm install', { cwd: projectRoot, stdio: 'inherit', timeout: 300000 });
+      s.stop('Dependencies installed');
+      return true;
+    } catch {
+      s.fail('npm install failed');
+      return false;
+    }
+  }
 }
 
 /**
@@ -65,25 +82,14 @@ async function installProviderPackages(selectedProviders, projectRoot) {
   }
 
   const s = spinner(`Installing ${needed.length} provider packages: ${needed.join(', ')}`);
-  return new Promise((resolve) => {
-    const proc = spawn(
-      /^win/.test(process.platform) ? 'npm.cmd' : 'npm',
-      ['install', '--save', ...needed],
-      { cwd: projectRoot, stdio: ['ignore', 'pipe', 'pipe'] }
-    );
-
-    proc.on('close', (code) => {
-      if (code === 0) {
-        s.stop(`Installed: ${needed.join(', ')}`);
-        resolve(true);
-      } else {
-        s.fail(`Failed to install: ${needed.join(', ')}`);
-        resolve(false);
-      }
-    });
-
-    proc.on('error', () => { s.fail('npm error'); resolve(false); });
-  });
+  try {
+    execSync(`npm install --save ${needed.join(' ')}`, { cwd: projectRoot, stdio: 'inherit', timeout: 120000 });
+    s.stop(`Installed: ${needed.join(', ')}`);
+    return true;
+  } catch {
+    s.fail(`Failed to install: ${needed.join(', ')}`);
+    return false;
+  }
 }
 
 /**

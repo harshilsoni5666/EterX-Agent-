@@ -15,7 +15,6 @@ const os = require('os');
 
 const ROOT = path.resolve(__dirname, '..');
 const LOCK_FILE = path.join(ROOT, '.workspaces', '.eterx.lock');
-const npm = /^win/.test(process.platform) ? 'npm.cmd' : 'npm';
 const MAX_RESTARTS = 3;
 
 // ── Single Instance Guard ──
@@ -65,9 +64,10 @@ function startNextServer(port, mode = 'dev') {
 
   console.log(`[EterX] Starting Next.js (${mode}) on port ${port}...`);
 
-  const proc = spawn(npm, args, {
+  const proc = spawn('npm', args, {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
+    shell: true,
     env: { ...process.env, PORT: String(port) },
     detached: false,
   });
@@ -118,6 +118,7 @@ function startElectron(port) {
   const proc = spawn(electronPath, ['.'], {
     cwd: ROOT,
     stdio: 'inherit',
+    shell: true,
     env: { ...process.env, ETERX_PORT: String(port), ELECTRON_URL: `http://localhost:${port}` },
   });
 

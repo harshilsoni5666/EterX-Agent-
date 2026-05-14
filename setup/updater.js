@@ -68,10 +68,9 @@ async function performUpgrade(projectRoot) {
   try { execSync('git stash pop', { cwd: projectRoot, stdio: 'ignore' }); } catch {}
 
   // 4. Re-install deps
-  const npm = /^win/.test(process.platform) ? 'npm.cmd' : 'npm';
   const s2 = spinner('Updating dependencies...');
   try {
-    execSync(`${npm} install`, { cwd: projectRoot, stdio: 'ignore', timeout: 120000 });
+    execSync('npm install', { cwd: projectRoot, stdio: 'ignore', timeout: 120000 });
     s2.stop('Dependencies updated');
   } catch {
     s2.fail('npm install failed');

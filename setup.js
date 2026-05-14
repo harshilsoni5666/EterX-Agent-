@@ -226,27 +226,23 @@ async function fullSetup() {
   ${c.green}${c.bold}⚡ EterX Agent is ready!${c.reset}
 
   ${c.cyan}Quick start:${c.reset}
-    ${c.bold}npm run dev${c.reset}            Web app at localhost:3000
-    ${c.bold}npm run desktop${c.reset}        Desktop app (Electron)
-    ${c.bold}npm run telegram-dev${c.reset}   Telegram bot
+    ${c.bold}eterx start${c.reset}          Web app at localhost:3000
+    ${c.bold}eterx desktop${c.reset}        Desktop app (Electron)
+    ${c.bold}eterx telegram${c.reset}       Telegram bot
 
   ${c.cyan}Management:${c.reset}
-    ${c.bold}node setup.js --reconfigure${c.reset}   Change API keys
-    ${c.bold}node setup.js --health${c.reset}        Test all connections
-    ${c.bold}node setup.js --status${c.reset}        View current config
-    ${c.bold}node setup.js --upgrade${c.reset}       Pull latest updates
-    ${c.bold}node setup.js --backup${c.reset}        Backup config
-    ${c.bold}node setup.js --repair${c.reset}        Fix broken install
-    ${c.bold}node setup.js --uninstall${c.reset}     Remove EterX
+    ${c.bold}eterx config${c.reset}         Change API keys
+    ${c.bold}eterx health${c.reset}         Test all connections
+    ${c.bold}eterx doctor${c.reset}         Deep system diagnosis
+    ${c.bold}eterx status${c.reset}         View current config
   `);
 
   const launchChoice = await selectLaunchMode(rl);
   rl.close();
 
-  const npm = /^win/.test(process.platform) ? 'npm.cmd' : 'npm';
-  if (launchChoice.index === 0) spawn(npm, ['run', 'dev'], { cwd: ROOT, stdio: 'inherit' });
-  else if (launchChoice.index === 1) spawn(npm, ['run', 'desktop'], { cwd: ROOT, stdio: 'inherit' });
-  else if (launchChoice.index === 2) spawn(npm, ['run', 'telegram-dev'], { cwd: ROOT, stdio: 'inherit' });
+  if (launchChoice.index === 0) spawn('npm', ['run', 'dev'], { cwd: ROOT, stdio: 'inherit', shell: true });
+  else if (launchChoice.index === 1) spawn('npm', ['run', 'desktop'], { cwd: ROOT, stdio: 'inherit', shell: true });
+  else if (launchChoice.index === 2) spawn('npm', ['run', 'telegram-dev'], { cwd: ROOT, stdio: 'inherit', shell: true });
 }
 
 // ══════════════════════════════════════════════
