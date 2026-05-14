@@ -1,7 +1,7 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════
 # EterX Agent — One-Line Installer (Linux/macOS)
-# Usage: curl -fsSL https://raw.githubusercontent.com/harshilsoni5666/eterx-agentuii/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/harshilsoni5666/EterX-agent-/main/install.sh | bash
 # ═══════════════════════════════════════════════
 
 set -e
@@ -66,12 +66,27 @@ fi
 
 # ── Clone or Update ──
 if [ -d "$INSTALL_DIR/.git" ]; then
-    echo -e "  ${CYAN}ℹ${NC} Existing install found. Pulling updates..."
+    echo -e "  ${CYAN}ℹ${NC} Existing install found at $INSTALL_DIR"
     cd "$INSTALL_DIR"
-    git pull --rebase 2>/dev/null || true
+    if [ "$ETERX_UPDATE" = "1" ]; then
+        echo -e "  ${CYAN}ℹ${NC} ETERX_UPDATE=1 set. Pulling updates..."
+        if git pull --rebase; then
+            echo -e "  ${GREEN}✔${NC} Repository updated"
+        else
+            echo -e "  ${RED}✖${NC} Repository update failed. Check the git output above."
+            exit 1
+        fi
+    else
+        echo -e "  ${CYAN}ℹ${NC} Skipping code update. Set ETERX_UPDATE=1 to update source files."
+    fi
 else
     echo -e "  ${CYAN}ℹ${NC} Cloning EterX to $INSTALL_DIR..."
-    git clone "$REPO" "$INSTALL_DIR"
+    if git clone "$REPO" "$INSTALL_DIR"; then
+        echo -e "  ${GREEN}✔${NC} Repository cloned"
+    else
+        echo -e "  ${RED}✖${NC} Clone failed. Check the git output above."
+        exit 1
+    fi
     cd "$INSTALL_DIR"
 fi
 
@@ -79,4 +94,8 @@ fi
 echo ""
 echo -e "  ${CYAN}ℹ${NC} Starting EterX setup wizard..."
 echo ""
-node setup.js
+if [ -f ".env.local" ]; then
+    node setup.js --auto
+else
+    node setup.js
+fi

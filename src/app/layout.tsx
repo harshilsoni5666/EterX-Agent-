@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import 'katex/dist/katex.min.css';
+import { AppBootOverlay } from '../components/layout/app-boot-overlay';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -33,6 +34,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${ inter.variable } ${ jetbrainsMono.variable } font-sans antialiased min-h-screen selection:bg-[#E2765A]/30 selection:text-white`}>
+        <AppBootOverlay />
         {children}
       </body>
     </html>

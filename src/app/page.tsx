@@ -2428,6 +2428,13 @@ function DeepWorkUI() {
           opacity: 1;
           filter: brightness(1.35);
         }
+        .custom-scrollbar::-webkit-scrollbar-button {
+          display: none !important;
+          width: 0 !important;
+          height: 0 !important;
+          background: none !important;
+          background-image: none !important;
+        }
         .code-span {
            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         }

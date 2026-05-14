@@ -226,11 +226,70 @@
 }
 *::-webkit-scrollbar-corner { background: var(--sb-track); }
 
+/* Final reset: keep scrollbars clean and prevent native arrow triangles. */
+.custom-scrollbar::-webkit-scrollbar-button,
+.eterx-modern-scrollbar::-webkit-scrollbar-button,
+.eterx-prompt-preview-scroll::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: none !important;
+  background-image: none !important;
+}
+
 @supports (-moz-appearance: none) {
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--sb-thumb) var(--sb-track);
   }
+}
+
+.eterx-app-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #101010;
+  pointer-events: none;
+  animation: eterx-loader-fade 900ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.eterx-app-loader-logo-shell {
+  width: 76px;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: scale(0.48);
+  animation: eterx-loader-grow 900ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform;
+}
+
+.eterx-app-loader-logo {
+  width: 54px;
+  height: 54px;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 34px rgba(0,0,0,0.52));
+  animation: eterx-loader-spin 1050ms linear infinite;
+  will-change: transform;
+}
+
+@keyframes eterx-loader-grow {
+  0% { transform: scale(0.48); opacity: 0.72; }
+  58% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes eterx-loader-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes eterx-loader-fade {
+  0%, 68% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
 }
 
 /* Streaming text cursor blink animation */
