@@ -12,6 +12,24 @@ const c = {
   brightMagenta: '\x1b[95m', brightWhite: '\x1b[97m',
 };
 
+for (const stream of [process.stdout, process.stderr]) {
+  if (!stream || stream.__eterxPipeGuarded) continue;
+  stream.__eterxPipeGuarded = true;
+  stream.on('error', (err) => {
+    if (err && err.code === 'EPIPE') process.exit(0);
+    throw err;
+  });
+}
+
+function writeOut(text) {
+  try {
+    process.stdout.write(text);
+  } catch (err) {
+    if (err && err.code === 'EPIPE') process.exit(0);
+    throw err;
+  }
+}
+
 // ── Icons ──
 const icons = {
   check: '✔', cross: '✖', warn: '⚠', info: 'ℹ', arrow: '→', bullet: '●',
@@ -63,17 +81,21 @@ function keyValue(key, value, keyWidth = 28) {
 function spinner(msg) {
   const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
   let i = 0;
-  const id = setInterval(() => {
-    process.stdout.write(`\r  ${c.cyan}${frames[i++ % frames.length]}${c.reset} ${msg}`);
-  }, 80);
+  const animated = !!process.stdout.isTTY && process.env.CI !== 'true';
+  if (!animated) {
+    console.log(`  ${c.cyan}${icons.info}${c.reset} ${msg}`);
+  }
+  const id = animated ? setInterval(() => {
+    writeOut(`\r  ${c.cyan}${frames[i++ % frames.length]}${c.reset} ${msg}`);
+  }, 80) : null;
   return {
     stop(finalMsg) {
-      clearInterval(id);
-      process.stdout.write(`\r  ${c.brightGreen}${icons.check}${c.reset} ${finalMsg || msg}${' '.repeat(20)}\n`);
+      if (id) clearInterval(id);
+      writeOut(`${animated ? '\r' : ''}  ${c.brightGreen}${icons.check}${c.reset} ${finalMsg || msg}${animated ? ' '.repeat(20) : ''}\n`);
     },
     fail(finalMsg) {
-      clearInterval(id);
-      process.stdout.write(`\r  ${c.red}${icons.cross}${c.reset} ${finalMsg || msg}${' '.repeat(20)}\n`);
+      if (id) clearInterval(id);
+      writeOut(`${animated ? '\r' : ''}  ${c.red}${icons.cross}${c.reset} ${finalMsg || msg}${animated ? ' '.repeat(20) : ''}\n`);
     },
     update(newMsg) {
       msg = newMsg;

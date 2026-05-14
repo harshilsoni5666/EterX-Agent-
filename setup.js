@@ -7,6 +7,7 @@
  *
  * Usage:
  *   node setup.js                    Full setup wizard
+ *   node setup.js --auto             Automatic no-prompt setup/repair
  *   node setup.js --reconfigure      Re-run API key wizard
  *   node setup.js --status           Show current config
  *   node setup.js --health           Run health check (test all keys)
@@ -33,7 +34,7 @@ const { spawn } = require('child_process');
 
 const ROOT = getProjectRoot();
 const args = process.argv.slice(2);
-const flag = args[0] || '';
+const flag = args.find(arg => arg.startsWith('--')) || '';
 
 // ══════════════════════════════════════════════
 //  CLI Router
@@ -43,6 +44,10 @@ async function main() {
   patchConsoleForLogging();
 
   switch (flag) {
+    case '--auto':
+    case '--yes':
+    case '--quick':
+      return autoSetup();
     case '--launch': return launch();
     case '--status': return showStatus();
     case '--health': return healthCheck();
@@ -65,6 +70,11 @@ async function fullSetup() {
   const version = getVersion(ROOT);
   const hash = getCommitHash(ROOT);
   info(`Version ${version} (${hash})`);
+
+  if (!process.stdin.isTTY) {
+    warn('No interactive terminal detected. Switching to automatic setup mode.');
+    return autoSetup({ bannerAlreadyShown: true });
+  }
 
   step('System Detection');
   const sys = getSystemInfo();
@@ -246,6 +256,138 @@ async function fullSetup() {
 }
 
 // ══════════════════════════════════════════════
+//  Automatic Setup
+// ══════════════════════════════════════════════
+async function autoSetup(options = {}) {
+  if (!options.bannerAlreadyShown) showBanner();
+  const version = getVersion(ROOT);
+  const hash = getCommitHash(ROOT);
+  info(`Version ${version} (${hash})`);
+  info('Automatic setup mode: no prompts, same terminal, best-effort repair.');
+
+  step('System Detection');
+  const sys = getSystemInfo();
+  if (!sys.node.installed || sys.node.major < 18) {
+    fail('Node.js 18+ is required. Install from https://nodejs.org');
+    process.exit(1);
+  }
+
+  step('Installing Dependencies');
+  const depOk = await installDependencies(ROOT);
+  if (!depOk) {
+    fail('Dependency installation failed. Review the npm output above.');
+    process.exit(1);
+  }
+
+  step('Environment');
+  ensureAutoEnvFile(ROOT);
+
+  step('Setting Up Local Storage');
+  setupLocalStorage(ROOT);
+
+  step('System Integration');
+  createDesktopShortcut(ROOT, process.platform);
+  createStartMenuEntry(ROOT);
+  registerCLI(ROOT);
+
+  const metaPath = path.join(ROOT, '.workspaces', 'config', 'setup-meta.json');
+  const metaDir = path.dirname(metaPath);
+  if (!fs.existsSync(metaDir)) fs.mkdirSync(metaDir, { recursive: true });
+  fs.writeFileSync(metaPath, JSON.stringify({
+    installedAt: new Date().toISOString(),
+    mode: 'auto',
+    version: getVersion(ROOT),
+    commit: getCommitHash(ROOT),
+    platform: process.platform,
+    nodeVersion: process.version,
+  }, null, 2));
+  ok('Setup metadata written');
+
+  step('Diagnostics');
+  const { runDoctor } = require('./setup/doctor');
+  await runDoctor(ROOT);
+
+  step('Automatic Setup Complete');
+  console.log(`
+  ${c.green}${c.bold}EterX setup is ready.${c.reset}
+
+  ${c.cyan}Next commands:${c.reset}
+    ${c.bold}eterx start${c.reset}      Web app
+    ${c.bold}eterx desktop${c.reset}    Desktop app
+    ${c.bold}eterx config${c.reset}     Add or update API keys
+    ${c.bold}eterx health${c.reset}     Test live API connections
+  `);
+}
+
+function ensureAutoEnvFile(projectRoot) {
+  const envPath = path.join(projectRoot, '.env.local');
+  if (fs.existsSync(envPath)) {
+    ok('.env.local already exists; preserving current keys');
+    return envPath;
+  }
+
+  const config = { providers: {}, services: {}, port: Number(process.env.PORT || 3000) || 3000 };
+
+  for (const provider of PROVIDERS) {
+    const keys = {};
+    for (const envKey of provider.envKeys || []) {
+      if (process.env[envKey]) keys[envKey] = process.env[envKey];
+    }
+
+    const multiKeys = [];
+    if (provider.multiKey && provider.envPrefix) {
+      if (process.env[provider.envKeys[0]]) multiKeys.push(process.env[provider.envKeys[0]]);
+      for (let i = 1; i <= (provider.maxKeys || 1); i++) {
+        const value = process.env[`${provider.envPrefix}${i}`];
+        if (value && !multiKeys.includes(value)) multiKeys.push(value);
+      }
+    }
+
+    if (Object.keys(keys).length > 0 || multiKeys.length > 0) {
+      config.providers[provider.id] = {
+        name: provider.name,
+        keys,
+        multiKeys,
+        envPrefix: provider.envPrefix,
+        endpoint: provider.endpoint || provider.defaultValue,
+      };
+    }
+  }
+
+  for (const service of SERVICES) {
+    const keys = {};
+    for (const envKey of service.envKeys || []) {
+      if (process.env[envKey]) keys[envKey] = process.env[envKey];
+    }
+
+    const multiKeys = [];
+    if (service.multiKey && service.envPrefix) {
+      for (let i = 1; i <= (service.maxKeys || 1); i++) {
+        const value = process.env[`${service.envPrefix}${i}`];
+        if (value) multiKeys.push(value);
+      }
+    }
+
+    if (Object.keys(keys).length > 0 || multiKeys.length > 0) {
+      config.services[service.id] = {
+        name: service.name,
+        keys,
+        multiKeys,
+        envPrefix: service.envPrefix,
+      };
+    }
+  }
+
+  const configuredKeys = Object.values(config.providers).some(p => Object.keys(p.keys || {}).length || (p.multiKeys || []).length)
+    || Object.values(config.services).some(s => Object.keys(s.keys || {}).length || (s.multiKeys || []).length);
+  if (!configuredKeys) {
+    warn('No API keys found in environment. Creating minimal .env.local; add keys later with eterx config.');
+  }
+
+  return generateEnvFile(config, projectRoot);
+}
+
+// ══════════════════════════════════════════════
 //  --reconfigure
 // ══════════════════════════════════════════════
 async function reconfigure() {
@@ -305,12 +447,15 @@ async function showStatus() {
   const metaPath = path.join(ROOT, '.workspaces', 'config', 'setup-meta.json');
   if (fs.existsSync(metaPath)) {
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    const providers = Array.isArray(meta.providers) ? meta.providers : [];
+    const services = Array.isArray(meta.services) ? meta.services : [];
     info(`Installed: ${meta.installedAt}`);
-    info(`Providers: ${meta.providers.join(', ')}`);
-    info(`Services: ${(meta.services || []).join(', ') || 'none'}`);
+    info(`Mode: ${meta.mode || 'interactive'}`);
+    info(`Providers: ${providers.join(', ') || 'none'}`);
+    info(`Services: ${services.join(', ') || 'none'}`);
     info(`Last health: ${meta.healthPassed || '?'} passed, ${meta.healthFailed || '?'} failed`);
   } else {
-    warn('No setup metadata. Run: node setup.js');
+    warn('No setup metadata. Run: node setup.js --auto or node setup.js');
   }
 
   const envPath = path.join(ROOT, '.env.local');
@@ -354,7 +499,10 @@ async function repair() {
   setupLocalStorage(ROOT);
   const ok2 = await installDependencies(ROOT);
   if (ok2) ok('Repair complete');
-  else fail('Repair failed — check setup.log');
+  else {
+    fail('Repair failed — check setup.log');
+    process.exitCode = 1;
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -454,7 +602,10 @@ async function uninstall() {
 // ══════════════════════════════════════════════
 //  --launch
 // ══════════════════════════════════════════════
-function launch() { require('./setup/launcher'); }
+function launch() {
+  const { main: launchMain } = require('./setup/launcher');
+  return launchMain();
+}
 
 // ══════════════════════════════════════════════
 //  --add-key

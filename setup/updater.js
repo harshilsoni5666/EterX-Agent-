@@ -54,23 +54,29 @@ async function performUpgrade(projectRoot) {
   // 2. Git pull
   const s = spinner('Pulling latest code...');
   try {
-    execSync('git stash', { cwd: projectRoot, stdio: 'ignore' });
-    execSync('git pull origin main --rebase', { cwd: projectRoot, stdio: 'ignore' });
+    execSync('git stash', { cwd: projectRoot, stdio: 'inherit' });
+    execSync('git pull origin main --rebase', { cwd: projectRoot, stdio: 'inherit' });
     s.stop('Code updated');
   } catch (e) {
     s.fail('Git pull failed');
     warn('Attempting recovery...');
-    try { execSync('git stash pop', { cwd: projectRoot, stdio: 'ignore' }); } catch {}
+    try { execSync('git stash pop', { cwd: projectRoot, stdio: 'inherit' }); } catch {}
     return false;
   }
 
   // 3. Restore stashed changes
-  try { execSync('git stash pop', { cwd: projectRoot, stdio: 'ignore' }); } catch {}
+  try { execSync('git stash pop', { cwd: projectRoot, stdio: 'inherit' }); } catch {}
 
   // 4. Re-install deps
   const s2 = spinner('Updating dependencies...');
   try {
-    execSync('npm install', { cwd: projectRoot, stdio: 'ignore', timeout: 120000 });
+    const installCmd = fs.existsSync(path.join(projectRoot, 'package-lock.json')) ? 'npm ci' : 'npm install';
+    try {
+      execSync(installCmd, { cwd: projectRoot, stdio: 'inherit', timeout: 300000 });
+    } catch {
+      warn('Standard dependency setup failed. Retrying with --legacy-peer-deps.');
+      execSync(`${installCmd} --legacy-peer-deps`, { cwd: projectRoot, stdio: 'inherit', timeout: 300000 });
+    }
     s2.stop('Dependencies updated');
   } catch {
     s2.fail('npm install failed');

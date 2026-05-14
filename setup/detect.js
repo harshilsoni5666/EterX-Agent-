@@ -1,7 +1,7 @@
 /**
  * EterX — OS Detection & Prerequisite Checks
  */
-const { execSync } = require('child_process');
+const { execFileSync, execSync } = require('child_process');
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
@@ -72,6 +72,47 @@ function checkPort(port) {
   } catch { return false; }
 }
 
+function getDiskFreeGB(targetDir) {
+  try {
+    const dir = path.resolve(targetDir || process.cwd());
+    if (os.platform() === 'win32') {
+      const driveName = path.parse(dir).root.charAt(0);
+      if (!driveName) return -1;
+
+      try {
+        const out = execSync(`powershell.exe -NoProfile -NonInteractive -Command "(Get-PSDrive -Name ${driveName}).Free"`, {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 10000,
+        }).trim();
+        const bytes = Number(out.replace(/[^\d.]/g, ''));
+        if (Number.isFinite(bytes) && bytes > 0) return bytes / (1024 ** 3);
+      } catch {}
+
+      const drive = `${driveName}:`;
+      const out = execSync(`wmic logicaldisk where "DeviceID='${drive}'" get FreeSpace /value`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 10000,
+      });
+      const match = out.match(/FreeSpace=(\d+)/);
+      return match ? parseInt(match[1], 10) / (1024 ** 3) : -1;
+    }
+
+    const out = execFileSync('df', ['-k', dir], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 10000,
+    });
+    const lines = out.trim().split(/\r?\n/);
+    const cols = lines[lines.length - 1].trim().split(/\s+/);
+    const freeKb = Number(cols[3]);
+    return Number.isFinite(freeKb) ? freeKb / (1024 ** 2) : -1;
+  } catch {
+    return -1;
+  }
+}
+
 function getSystemInfo() {
   const osInfo = detectOS();
   const node = checkNodeVersion();
@@ -117,4 +158,4 @@ function getProjectRoot() {
   return path.resolve(__dirname, '..');
 }
 
-module.exports = { detectOS, checkCommand, checkNodeVersion, checkGit, checkNpm, checkPort, getSystemInfo, findFreePort, getProjectRoot };
+module.exports = { detectOS, checkCommand, checkNodeVersion, checkGit, checkNpm, checkPort, getDiskFreeGB, getSystemInfo, findFreePort, getProjectRoot };

@@ -4,58 +4,53 @@
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { ok, warn, fail, info, spinner } = require('./banner');
+const { ok, warn, fail, info, line } = require('./banner');
 const { getProjectRoot } = require('./detect');
+
+function runNpm(args, projectRoot) {
+  const label = `npm ${args.join(' ')}`;
+  console.log();
+  info(`Running ${label}`);
+  line();
+
+  return new Promise((resolve) => {
+    const proc = spawn('npm', args, {
+      cwd: projectRoot,
+      stdio: 'inherit',
+      shell: process.platform === 'win32',
+      env: { ...process.env, NODE_ENV: 'development' },
+    });
+
+    proc.on('error', (err) => {
+      fail(`${label} could not start: ${err.message}`);
+      resolve(false);
+    });
+
+    proc.on('close', (code) => {
+      line();
+      if (code === 0) {
+        ok(`${label} completed`);
+        resolve(true);
+      } else {
+        fail(`${label} exited with code ${code}`);
+        resolve(false);
+      }
+    });
+  });
+}
 
 /**
  * Install npm dependencies with live output
  */
 async function installDependencies(projectRoot) {
-  const s = spinner('Installing dependencies...');
+  const hasLockfile = fs.existsSync(path.join(projectRoot, 'package-lock.json'));
+  const baseArgs = hasLockfile ? ['ci'] : ['install'];
+  const installed = await runNpm(baseArgs, projectRoot);
+  if (installed) return true;
 
-  // Try spawn first, fallback to execSync if EINVAL
-  try {
-    return await new Promise((resolve) => {
-      const proc = spawn('npm', ['install'], {
-        cwd: projectRoot,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        shell: true,
-        env: { ...process.env, NODE_ENV: 'development' },
-      });
-
-      let output = '';
-      proc.stdout.on('data', (d) => { output += d.toString(); });
-      proc.stderr.on('data', (d) => { output += d.toString(); });
-
-      proc.on('close', (code) => {
-        if (code === 0) { s.stop('Dependencies installed'); resolve(true); }
-        else { s.fail('Dependency install failed'); console.log(output.slice(-500)); resolve(false); }
-      });
-
-      proc.on('error', (err) => {
-        // EINVAL fallback: use execSync
-        s.update('Retrying with fallback...');
-        try {
-          execSync('npm install', { cwd: projectRoot, stdio: 'inherit', timeout: 300000 });
-          s.stop('Dependencies installed (fallback)');
-          resolve(true);
-        } catch {
-          s.fail('npm install failed');
-          resolve(false);
-        }
-      });
-    });
-  } catch {
-    // Ultimate fallback
-    try {
-      execSync('npm install', { cwd: projectRoot, stdio: 'inherit', timeout: 300000 });
-      s.stop('Dependencies installed');
-      return true;
-    } catch {
-      s.fail('npm install failed');
-      return false;
-    }
-  }
+  warn('Standard dependency setup failed. Retrying with --legacy-peer-deps for compatibility.');
+  warn('This keeps setup moving on machines where npm blocks peer dependency mismatches.');
+  return runNpm([...baseArgs, '--legacy-peer-deps'], projectRoot);
 }
 
 /**
@@ -81,15 +76,11 @@ async function installProviderPackages(selectedProviders, projectRoot) {
     return true;
   }
 
-  const s = spinner(`Installing ${needed.length} provider packages: ${needed.join(', ')}`);
-  try {
-    execSync(`npm install --save ${needed.join(' ')}`, { cwd: projectRoot, stdio: 'inherit', timeout: 120000 });
-    s.stop(`Installed: ${needed.join(', ')}`);
-    return true;
-  } catch {
-    s.fail(`Failed to install: ${needed.join(', ')}`);
-    return false;
-  }
+  const installed = await runNpm(['install', '--save', ...needed], projectRoot);
+  if (installed) return true;
+
+  warn('Provider package install failed. Retrying with --legacy-peer-deps.');
+  return runNpm(['install', '--save', '--legacy-peer-deps', ...needed], projectRoot);
 }
 
 /**

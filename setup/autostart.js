@@ -36,7 +36,7 @@ function registerAutoStartWindows(projectRoot, enable) {
 
     const batPath = path.join(projectRoot, 'EterX.bat');
     if (!fs.existsSync(batPath)) {
-      const batContent = `@echo off\ntitle EterX Agent\ncd /d "${projectRoot}"\nnode setup\\launcher.js --no-electron\nstart "" "http://localhost:3000"\n`;
+      const batContent = `@echo off\ntitle EterX Agent\ncd /d "${projectRoot}"\nnode setup\\launcher.js --no-electron\n`;
       fs.writeFileSync(batPath, batContent);
     }
 
@@ -169,8 +169,9 @@ function registerCLI(projectRoot) {
 
   if (platform === 'win32') {
     try {
-      // Create eterx.cmd in project root
-      const cmdContent = `@echo off\ncd /d "${projectRoot}"\nnode setup.js %*\n`;
+      // Create eterx.cmd in project root. Route to eterx.js so commands
+      // like `eterx start` and `eterx doctor` use the real CLI router.
+      const cmdContent = `@echo off\ncd /d "${projectRoot}"\nnode eterx.js %*\n`;
       const cmdPath = path.join(projectRoot, 'eterx.cmd');
       fs.writeFileSync(cmdPath, cmdContent);
 
@@ -190,7 +191,7 @@ function registerCLI(projectRoot) {
   } else {
     try {
       // Create eterx shell script
-      const shContent = `#!/bin/bash\ncd "${projectRoot}"\nnode setup.js "$@"\n`;
+      const shContent = `#!/bin/bash\ncd "${projectRoot}"\nnode eterx.js "$@"\n`;
       const shPath = path.join(projectRoot, 'eterx');
       fs.writeFileSync(shPath, shContent, { mode: 0o755 });
 

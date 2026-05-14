@@ -2,12 +2,58 @@
  * EterX — Doctor (Deep Diagnostics)
  * 40+ checks across system, files, deps, env, network, agent core, and build.
  */
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { ok, warn, fail, info, spinner, c, icons, step, header, line, doubleLine, successBox, errorBox, boxMessage } = require('./banner');
-const { checkNodeVersion, checkGit, checkPort } = require('./detect');
+const { checkNodeVersion, checkGit, checkPort, getDiskFreeGB } = require('./detect');
+
+function runTypeScriptCheck(projectRoot) {
+  const command = process.platform === 'win32' ? 'cmd.exe' : 'npx';
+  const args = process.platform === 'win32'
+    ? ['/d', '/s', '/c', 'npx tsc --noEmit --pretty false']
+    : ['tsc', '--noEmit', '--pretty', 'false'];
+  const result = spawnSync(command, args, {
+    cwd: projectRoot,
+    encoding: 'utf8',
+    timeout: 60000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    shell: false,
+  });
+
+  return {
+    ok: result.status === 0,
+    timedOut: result.error && result.error.code === 'ETIMEDOUT',
+    output: `${result.stdout || ''}${result.stderr || ''}`.trim(),
+    error: result.error,
+  };
+}
+
+function runNpmPlanCheck(projectRoot) {
+  const hasLockfile = fs.existsSync(path.join(projectRoot, 'package-lock.json'));
+  const npmArgs = hasLockfile
+    ? ['ci', '--dry-run', '--legacy-peer-deps']
+    : ['install', '--dry-run', '--legacy-peer-deps'];
+  const command = process.platform === 'win32' ? 'cmd.exe' : 'npm';
+  const args = process.platform === 'win32'
+    ? ['/d', '/s', '/c', `npm ${npmArgs.join(' ')}`]
+    : npmArgs;
+  const result = spawnSync(command, args, {
+    cwd: projectRoot,
+    encoding: 'utf8',
+    timeout: 90000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    shell: false,
+  });
+
+  return {
+    label: `npm ${npmArgs.join(' ')}`,
+    ok: result.status === 0,
+    output: `${result.stdout || ''}${result.stderr || ''}`.trim(),
+    timedOut: result.error && result.error.code === 'ETIMEDOUT',
+  };
+}
 
 async function runDoctor(projectRoot) {
   let issues = 0;
@@ -38,18 +84,7 @@ async function runDoctor(projectRoot) {
   check(`RAM ≥ 4 GB (${ram.toFixed(1)} GB)`, ram >= 4, 'EterX needs at least 4 GB');
   softCheck(`RAM ≥ 8 GB (${ram.toFixed(1)} GB)`, ram >= 8, 'More RAM = better agent perf');
 
-  let diskGB = -1;
-  try {
-    if (process.platform === 'win32') {
-      const drive = path.parse(projectRoot).root.replace('\\', '');
-      const out = execSync(`wmic logicaldisk where "DeviceID='${drive}'" get FreeSpace /value`, { encoding: 'utf8' });
-      const match = out.match(/FreeSpace=(\d+)/);
-      diskGB = match ? parseInt(match[1]) / (1024 ** 3) : -1;
-    } else {
-      const out = execSync(`df -BG "${projectRoot}" | tail -1 | awk '{print $4}'`, { encoding: 'utf8' });
-      diskGB = parseInt(out) || -1;
-    }
-  } catch {}
+  const diskGB = getDiskFreeGB(projectRoot);
   if (diskGB > 0) check(`Disk space ≥ 2 GB (${diskGB.toFixed(1)} GB free)`, diskGB >= 2, 'Free up disk space');
 
   // ═══ PROJECT FILES ═══
@@ -94,6 +129,13 @@ async function runDoctor(projectRoot) {
   }
 
   softCheck('package-lock.json', fs.existsSync(path.join(projectRoot, 'package-lock.json')), 'npm install to generate');
+  const npmPlan = runNpmPlanCheck(projectRoot);
+  softCheck(`${npmPlan.label} works`, npmPlan.ok, npmPlan.timedOut ? 'Dependency dry-run timed out' : 'Review npm output');
+  if (!npmPlan.ok && npmPlan.output) {
+    npmPlan.output.split(/\r?\n/).filter(Boolean).slice(0, 6).forEach((lineText) => {
+      console.log(`  ${c.dim}${lineText}${c.reset}`);
+    });
+  }
 
   // ═══ ENVIRONMENT ═══
   header(`${icons.key} Environment Variables`);
@@ -176,16 +218,22 @@ async function runDoctor(projectRoot) {
 
   softCheck('Next.js build cache', fs.existsSync(path.join(projectRoot, '.next')), 'First run will be slower');
 
-  try {
-    const s = spinner('Checking TypeScript...');
-    execSync('npx tsc --noEmit --pretty 2>&1 | head -5', { cwd: projectRoot, encoding: 'utf8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] });
+  const s = spinner('Checking TypeScript...');
+  const ts = runTypeScriptCheck(projectRoot);
+  if (ts.ok) {
     s.stop('No TypeScript errors');
     passed++;
-  } catch (e) {
-    const output = String(e.stdout || e.stderr || '');
-    const errorCount = (output.match(/error TS/g) || []).length;
-    if (errorCount > 0) { warn(`${errorCount} TypeScript error(s)`); warnings++; }
-    else { ok('TypeScript check completed'); passed++; }
+  } else if (ts.timedOut) {
+    s.fail('TypeScript check timed out after 60s');
+    warnings++;
+  } else {
+    s.fail('TypeScript check found issues');
+    const errorCount = (ts.output.match(/error TS/g) || []).length;
+    warn(`${errorCount || 'Some'} TypeScript error(s)`);
+    ts.output.split(/\r?\n/).filter(Boolean).slice(0, 8).forEach((lineText) => {
+      console.log(`  ${c.dim}${lineText}${c.reset}`);
+    });
+    warnings++;
   }
 
   // ═══ SUMMARY ═══

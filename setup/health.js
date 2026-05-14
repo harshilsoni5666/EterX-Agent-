@@ -7,6 +7,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { ok, warn, fail, info, spinner, c } = require('./banner');
+const { getDiskFreeGB } = require('./detect');
 
 /**
  * Make a simple HTTPS/HTTP request — zero deps
@@ -122,18 +123,22 @@ async function testInternet() {
  * Check disk space (returns GB free)
  */
 function checkDiskSpace(dir) {
-  try {
-    const { execSync } = require('child_process');
-    if (process.platform === 'win32') {
-      const drive = path.parse(dir).root.replace('\\', '');
-      const out = execSync(`wmic logicaldisk where "DeviceID='${drive}'" get FreeSpace /value`, { encoding: 'utf8' });
-      const match = out.match(/FreeSpace=(\d+)/);
-      return match ? parseInt(match[1]) / (1024 ** 3) : -1;
-    } else {
-      const out = execSync(`df -BG "${dir}" | tail -1 | awk '{print $4}'`, { encoding: 'utf8' });
-      return parseInt(out) || -1;
-    }
-  } catch { return -1; }
+  return getDiskFreeGB(dir);
+}
+
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+
+  async function runNext() {
+    const index = cursor++;
+    if (index >= items.length) return;
+    results[index] = await worker(items[index], index);
+    await runNext();
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runNext));
+  return results;
 }
 
 /**
@@ -186,10 +191,8 @@ async function runHealthCheck(projectRoot) {
 
   if (geminiKeys.length > 0) {
     const s = spinner(`Testing ${geminiKeys.length} Gemini key(s)...`);
-    let validCount = 0;
-    for (const key of geminiKeys) {
-      if (await testGeminiKey(key.value)) validCount++;
-    }
+    const keyResults = await mapWithConcurrency(geminiKeys, 5, (key) => testGeminiKey(key.value));
+    const validCount = keyResults.filter(Boolean).length;
     if (validCount === geminiKeys.length) {
       s.stop(`All ${validCount} Gemini keys valid`);
       results.passed++;

@@ -42,6 +42,7 @@ ${c.brightCyan}${c.bold}  ╚══════╝   ╚═╝   ╚════
 `;
 
 const cmd = (process.argv[2] || '').toLowerCase();
+const extraArgs = process.argv.slice(3);
 
 // ── First-run detection ──
 function isFirstRun() {
@@ -65,34 +66,34 @@ switch (cmd) {
     launchWithBanner(`${i.globe} Starting EterX Telegram Bot...`, 'telegram-dev'); break;
 
   case 'setup': case 'install':
-    runSetup(''); break;
+    runSetup('', extraArgs); break;
 
   case 'config': case 'configure': case 'keys':
-    runSetup('--reconfigure'); break;
+    runSetup('--reconfigure', extraArgs); break;
 
   case 'health': case 'check': case 'test':
-    runSetup('--health'); break;
+    runSetup('--health', extraArgs); break;
 
   case 'status': case 'info':
-    runSetup('--status'); break;
+    runSetup('--status', extraArgs); break;
 
   case 'upgrade': case 'update':
-    runSetup('--upgrade'); break;
+    runSetup('--upgrade', extraArgs); break;
 
   case 'backup':
-    runSetup('--backup'); break;
+    runSetup('--backup', extraArgs); break;
 
   case 'restore':
-    runSetup('--restore'); break;
+    runSetup('--restore', extraArgs); break;
 
   case 'repair': case 'fix':
-    runSetup('--repair'); break;
+    runSetup('--repair', extraArgs); break;
 
   case 'uninstall': case 'remove':
-    runSetup('--uninstall'); break;
+    runSetup('--uninstall', extraArgs); break;
 
   case 'add-key': case 'key':
-    runSetup('--add-key'); break;
+    runSetup('--add-key', extraArgs); break;
 
   case 'doctor': case 'diagnose':
     runDoctor(); break;
@@ -144,6 +145,7 @@ function showFirstRun() {
   console.log(`  ${c.cyan}${c.bold}${i.arrow} Run:${c.reset}  ${c.bold}eterx setup${c.reset}`);
   console.log(`  ${c.dim}   This will install dependencies, configure your`);
   console.log(`   API keys, set up local storage, and launch EterX.${c.reset}\n`);
+  console.log(`  ${c.dim}No prompts / repair mode:${c.reset} ${c.bold}eterx setup --auto${c.reset}\n`);
 
   console.log(`  ${c.gray}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${c.reset}\n`);
   console.log(`  ${c.dim}Or jump straight in:${c.reset}`);
@@ -182,12 +184,15 @@ function launchWithBanner(message, script) {
   // Auto-install deps if missing
   const nmPath = path.join(ROOT, 'node_modules');
   if (!fs.existsSync(nmPath)) {
-    console.log(`  ${c.brightYellow}${i.warn}${c.reset} ${i.package} Dependencies missing. Installing...\n`);
-    const proc = spawn('npm', ['install'], { cwd: ROOT, stdio: 'inherit', shell: true });
+    console.log(`  ${c.brightYellow}${i.warn}${c.reset} ${i.package} Dependencies missing. Running setup repair...\n`);
+    const proc = spawn('node', ['setup.js', '--repair'], { cwd: ROOT, stdio: 'inherit' });
     proc.on('close', (code) => {
       if (code === 0) {
         console.log(`\n  ${c.brightGreen}${i.check}${c.reset} Dependencies ready. Launching...\n`);
         doLaunch(script);
+      } else {
+        console.log(`\n  ${c.red}${i.cross} Dependency repair failed${c.reset}`);
+        console.log(`  ${c.dim}Run ${c.bold}node setup.js --repair${c.reset}${c.dim} and review the terminal output.${c.reset}\n`);
       }
     });
     return;
@@ -212,9 +217,10 @@ function doLaunch(script) {
 // ═══════════════════════════════════════════
 //  Setup Router
 // ═══════════════════════════════════════════
-function runSetup(flag) {
+function runSetup(flag, passthrough = []) {
   const args = ['setup.js'];
   if (flag) args.push(flag);
+  args.push(...passthrough);
   spawn('node', args, { cwd: ROOT, stdio: 'inherit' });
 }
 
@@ -242,6 +248,7 @@ function showInteractiveMenu() {
   console.log();
   console.log(`  ${c.bold}${i.gear} Setup${c.reset}`);
   console.log(`    ${c.cyan}eterx setup${c.reset}        ${i.sparkle} Full setup wizard`);
+  console.log(`    ${c.cyan}eterx setup --auto${c.reset} ${i.gear} Automatic no-prompt setup`);
   console.log(`    ${c.cyan}eterx config${c.reset}       ${i.key} Change API keys`);
   console.log(`    ${c.cyan}eterx add-key${c.reset}      ${i.key} Quick-add one key`);
   console.log();
