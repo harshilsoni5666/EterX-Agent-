@@ -21,7 +21,7 @@
 
 ---
 
-## 🚀 About EterX Agent
+##  About EterX Agent
 
 EterX-Agent is a  AI agent system focused on intelligent task execution, memory persistence, autonomous workflows, and scalable AI infrastructure.
 
@@ -40,7 +40,7 @@ It is designed to operate as a AI assistant capable of learning, adapting, and i
 
 ---
 
-## 🛠 Installation
+##  Installation
 
 ### One-Command Install
 
@@ -79,7 +79,7 @@ The interactive setup wizard will walk you through:
 
 ---
 
-## 🧠 Supported Model Providers
+##  Supported Model Providers
 
 | Provider | Models | Key |
 |----------|--------|-----|
@@ -105,7 +105,7 @@ The interactive setup wizard will walk you through:
 
 ---
 
-## ⚡ Running EterX
+##  Running EterX
 
 ```bash
 eterx start          # Web app at localhost:3000
@@ -122,7 +122,7 @@ npm run eterx:telegram
 
 ---
 
-## 🔧 CLI Commands
+##  CLI Commands
 
 ```bash
 # Setup & Configuration
@@ -150,7 +150,7 @@ eterx uninstall        # Remove EterX
 
 ---
 
-## 📁 Local Storage
+##  Local Storage
 
 All data is stored locally on your machine — nothing is sent to any cloud.
 
@@ -173,12 +173,12 @@ All data is stored locally on your machine — nothing is sent to any cloud.
 
 
 
-## 📌 Status
+##  Status
 
-🚧 Currently Under Development
+ Currently Under Development
 
 ---
 
-## 👨‍💻 Developer
+##  Developer
 
 Built by Harshil Soni
